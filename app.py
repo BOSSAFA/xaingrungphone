@@ -318,48 +318,45 @@ def api_search():
             except: pass
     if not target_pid: return jsonify({"results": []})
 
-    queue = [(target_pid, "ข้อมูลเป้าหมายหลัก", 0)]
-    visited = set(); final_results = []
+    final_results = []
     
-    while queue and len(final_results) < 20:
-        pid, role, level = queue.pop(0)
-        if pid in visited or not pid or len(str(pid)) != 13 or str(pid) == '0'*13: continue
-        visited.add(pid)
-        
-        res = nhso_client.search_by_pid(pid)
-        if res.get('success'):
-            p = res['data'].get("personData", {})
-            if p:
-                fullname = p.get('fullName', '-')
-                names = fullname.split()
-                firstname = names[0] if names else "เป้าหมาย"
-                h = p.get('homeAddress', {}); c = p.get('addressCatm', {})
-                f_id = str(p.get('fatherPid', p.get('fatherId', '0000000000000')))
-                m_id = str(p.get('motherPid', p.get('motherId', '0000000000000')))
+    # ดึงข้อมูลเป้าหมายหลักคนเดียว (ตัดระบบ Queue ญาติ 20 คนออกตามสั่ง)
+    res = nhso_client.search_by_pid(target_pid)
+    if res.get('success'):
+        p = res['data'].get("personData", {})
+        if p:
+            fullname = p.get('fullName', '-')
+            h = p.get('homeAddress', {}); c = p.get('addressCatm', {})
+            f_id = str(p.get('fatherPid', p.get('fatherId', '0000000000000')))
+            m_id = str(p.get('motherPid', p.get('motherId', '0000000000000')))
 
-                final_results.append({
-                    "role": role, "pid": pid, "name": fullname,
-                    "gender": "ชาย" if "นาย" in fullname or "ด.ช." in fullname else "หญิง" if "นาง" in fullname or "น.ส." in fullname or "ด.ญ." in fullname else "ไม่ระบุ",
-                    "birth": p.get('displayBirthDate', '-'),
-                    "religion": "พุทธ", "blood": p.get('bloodGroup', 'O'), "job": "รับจ้างทั่วไป",
-                    "addr": f"บ้านเลขที่ {h.get('adressNo','-')} หมู่ที่ {h.get('moo','00')} ตำบล{c.get('tumbonName','-')} อำเภอ{c.get('amphurName','-')} จังหวัด{c.get('changwatName','-')}",
-                    "father_id": f_id if f_id != '0000000000000' else "0", 
-                    "mother_id": m_id if m_id != '0000000000000' else "0"
-                })
+            # ดึงชื่อพ่อ
+            f_label = f_id
+            if f_id != '0000000000000' and len(f_id) == 13:
+                time.sleep(0.3)
+                rf = nhso_client.search_by_pid(f_id)
+                if rf.get('success'):
+                    f_name = rf['data'].get('personData', {}).get('fullName', '')
+                    if f_name: f_label = f"{f_name} ({f_id})"
 
-                if level < 2:
-                    if level == 0:
-                        f_role, m_role = (f"บิดา ของ {firstname}", f"มารดา ของ {firstname}")
-                    elif level == 1:
-                        if "บิดา" in role:
-                            f_role, m_role = (f"ปู่ ของเป้าหมายหลัก (บิดาของ {firstname})", f"ย่า ของเป้าหมายหลัก (มารดาของ {firstname})")
-                        else:
-                            f_role, m_role = (f"ตา ของเป้าหมายหลัก (บิดาของ {firstname})", f"ยาย ของเป้าหมายหลัก (มารดาของ {firstname})")
+            # ดึงชื่อแม่
+            m_label = m_id
+            if m_id != '0000000000000' and len(m_id) == 13:
+                time.sleep(0.3)
+                rm = nhso_client.search_by_pid(m_id)
+                if rm.get('success'):
+                    m_name = rm['data'].get('personData', {}).get('fullName', '')
+                    if m_name: m_label = f"{m_name} ({m_id})"
 
-                    if len(f_id) == 13 and f_id.isdigit() and f_id != '0'*13: 
-                        queue.append((f_id, f_role, level + 1))
-                    if len(m_id) == 13 and m_id.isdigit() and m_id != '0'*13: 
-                        queue.append((m_id, m_role, level + 1))
+            final_results.append({
+                "role": "ข้อมูลเป้าหมายหลัก", "pid": target_pid, "name": fullname,
+                "gender": "ชาย" if "นาย" in fullname or "ด.ช." in fullname else "หญิง" if "นาง" in fullname or "น.ส." in fullname or "ด.ญ." in fullname else "ไม่ระบุ",
+                "birth": p.get('displayBirthDate', '-'),
+                "religion": "พุทธ", "blood": p.get('bloodGroup', 'O'), "job": "รับจ้างทั่วไป",
+                "addr": f"บ้านเลขที่ {h.get('adressNo','-')} หมู่ที่ {h.get('moo','00')} ตำบล{c.get('tumbonName','-')} อำเภอ{c.get('amphurName','-')} จังหวัด{c.get('changwatName','-')}",
+                "father_id": f_label if f_id != '0000000000000' else "0", 
+                "mother_id": m_label if m_id != '0000000000000' else "0"
+            })
                 
     return jsonify({"results": final_results})
 
