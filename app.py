@@ -50,10 +50,6 @@ class NHSOAuthClient:
             resp = self.session.post(f'{self.base_url}/realms/nhso/login-actions/authenticate', 
                                     params={'session_code': s.group(1), 'execution': e.group(1), 'client_id': 'authencode', 'tab_id': t.group(1)}, 
                                     data=login_data, allow_redirects=True, verify=False)
-            
-            # --- จุดที่ 1: เช็คสถานะการ Login ของ NHSO ---
-            print(f">>> DEBUG LOGIN: {resp.status_code} | {resp.url}")
-
             if 'code=' in resp.url or 'KEYCLOAK_IDENTITY' in self.session.cookies:
                 self.session.get(f'{self.api_url}/authencode/oauth2/authorization/authencode', verify=False)
                 self.is_authenticated = True
@@ -63,10 +59,6 @@ class NHSOAuthClient:
     def search_by_pid(self, pid):
         try:
             resp = self.session.get(f'{self.api_url}/authencode/api/nch-personal-fund/search-by-pid', params={'pid': pid}, timeout=10, verify=False)
-            
-            # --- จุดที่ 2: เช็คข้อมูลที่ได้จาก NHSO ---
-            print(f">>> DEBUG NHSO RESULT: {resp.status_code} | {resp.text[:100]}")
-
             return {"success": True, "data": resp.json()} if resp.status_code == 200 else {"success": False}
         except: return {"success": False}
 
@@ -237,7 +229,7 @@ def search_page():
                 <div class="id-card fade-in">
                     <div class="id-card-header">
                         <span style="font-family:'Orbitron'; font-size:12px;"><i class="fa fa-fingerprint"></i> ${{p.role}}</span>
-                        <span style="font-size:10px; color:var(--accent)">MATCH CONFIDENCE: 100%</span>
+                        <span style="font-size:10px; color:var(--accent)">MATCH CONFIDENCE: oza%</span>
                     </div>
                     <div class="id-card-body">
                         <div class="id-photo">
@@ -308,9 +300,6 @@ def api_search():
     clean_query = re.sub(r'\D', '', query)
     target_pid = clean_query if len(clean_query) == 13 else None
     
-    # --- จุดที่ 3: เช็คค่าเบอร์หรือเลขบัตรที่ส่งเข้ามาค้นหา ---
-    print(f">>> DEBUG SEARCH API: MODE={mode} | QUERY={clean_query}")
-
     if not target_pid:
         res_true = true_client.search(clean_query)
         if res_true:
@@ -318,6 +307,7 @@ def api_search():
             except: pass
     if not target_pid: return jsonify({"results": []})
 
+    # ส่วนเพิ่มระบบค้นหาเครือญาติสัมพันธ์ (พ่อแม่ปู่ย่าตายาย)
     queue = [(target_pid, "ข้อมูลเป้าหมายหลัก", 0)]
     visited = set(); final_results = []
     
@@ -347,6 +337,7 @@ def api_search():
                     "mother_id": m_id if m_id != '0000000000000' else "0"
                 })
 
+                # ระบบค้นหาลำดับญาติเชิงลึก
                 if level < 2:
                     if level == 0:
                         f_role, m_role = (f"บิดา ของ {firstname}", f"มารดา ของ {firstname}")
@@ -371,4 +362,4 @@ def admin():
     return f"Token: {tk}"
 
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=10000)
+    app.run(host='0.0.0.0', port=5000)
