@@ -56,6 +56,7 @@ HTML_CODE = """
         /* HERO SECTION */
         .hero-title {
             font-size: clamp(4rem, 12vw, 9rem);
+            font-weight: 900;
             line-height: 0.85;
             text-shadow: 0 0 40px rgba(157, 78, 221, 0.4);
             letter-spacing: -4px;
@@ -147,6 +148,34 @@ HTML_CODE = """
             border: 1px solid #1f1f1f !important;
             color: #fff !important;
         }
+
+        /* --- STYLES FOR NEW MENU HOME PAGE --- */
+        .menu-card {
+            background: linear-gradient(145deg, #0f0f0f, #050505);
+            border: 1px solid #1f1f1f;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+        .menu-card:hover {
+            border-color: var(--primary);
+            transform: translateY(-5px);
+            box-shadow: 0 10px 40px -10px rgba(157, 78, 221, 0.3);
+        }
+        .menu-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; width: 2px; height: 100%;
+            background: var(--primary);
+            opacity: 0; transition: 0.3s;
+        }
+        .menu-card:hover::before { opacity: 1; }
+
+        /* Profile & Plan Styles */
+        .profile-gradient {
+            background: linear-gradient(to bottom, rgba(157, 78, 221, 0.1), transparent);
+        }
     </style>
 </head>
 <body>
@@ -164,13 +193,170 @@ HTML_CODE = """
         </div>
     </section>
 
-    <section id="home-page" class="page hidden min-h-screen flex flex-col items-center justify-center p-6 text-center">
-        <p class="header-font text-purple-400 tracking-[2em] text-[12px] mb-8 font-black">STRIKE SYSTEM ONLINE</p>
-        <h1 class="hero-title header-font font-black text-white italic uppercase">
-            XAINRUNG<br><span class="text-purple-600">STRIKE</span>
-        </h1>
-        <div class="mt-16">
-            <button onclick="showPage('console')" class="btn-enter">INITIATE ACCESS</button>
+    <section id="home-page" class="page hidden min-h-screen flex flex-col items-center justify-center p-6">
+        <div class="max-w-6xl w-full">
+            <div class="flex justify-between items-end mb-12 border-b border-zinc-800 pb-6">
+                <div>
+                    <h1 class="header-font text-4xl md:text-6xl font-black text-white italic tracking-tighter">
+                        XAINGRUNG <span class="text-transparent bg-clip-text bg-gradient-to-r from-purple-500 to-white">PANEL</span>
+                    </h1>
+                    <p class="text-zinc-500 text-xs md:text-sm tracking-[0.5em] uppercase mt-2">Welcome Back, Commander</p>
+                </div>
+                <div class="hidden md:block text-right">
+                    <div class="text-xs text-zinc-600 font-mono">SERVER STATUS</div>
+                    <div class="flex items-center justify-end gap-2 text-green-500 font-bold text-sm">
+                        <span class="relative flex h-2 w-2">
+                          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                          <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                        </span>
+                        OPERATIONAL
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                
+                <div onclick="showPage('console')" class="menu-card col-span-1 md:col-span-2 p-8 md:p-10 rounded-2xl group">
+                    <div class="flex justify-between items-start h-full flex-col">
+                        <div class="w-full">
+                            <div class="flex justify-between items-center mb-4">
+                                <span class="bg-purple-900/30 text-purple-400 border border-purple-500/30 text-[10px] px-2 py-1 rounded uppercase tracking-wider font-bold">L4 / L7 Methods</span>
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-white opacity-50 group-hover:opacity-100 transition" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                </svg>
+                            </div>
+                            <h2 class="header-font text-3xl font-bold text-white mb-2">ATTACK HUB</h2>
+                            <p class="text-zinc-400 text-sm max-w-md">Access the global attack console. Execute Layer 4 and Layer 7 stress tests with real-time feedback.</p>
+                        </div>
+                        <div class="mt-8 flex items-center gap-2 text-purple-400 font-bold text-sm group-hover:translate-x-2 transition">
+                            ENTER CONSOLE <span>&rarr;</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div onclick="showPage('profile')" class="menu-card p-8 rounded-2xl flex flex-col justify-between">
+                    <div>
+                        <div class="w-12 h-12 bg-zinc-800 rounded-full flex items-center justify-center text-xl mb-4">👤</div>
+                        <h3 class="header-font text-xl font-bold text-white">MY PROFILE</h3>
+                        <div class="mt-4 space-y-3">
+                            <div>
+                                <div class="flex justify-between text-xs text-zinc-500 mb-1">PLAN EXPIRY</div>
+                                <div class="text-sm text-white font-mono">LIFETIME</div>
+                            </div>
+                            <div>
+                                <div class="flex justify-between text-xs text-zinc-500 mb-1">CONCURRENTS</div>
+                                <div class="text-sm text-white font-mono">1 / 1 Slots</div>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="w-full mt-6 py-2 border border-zinc-700 text-zinc-400 text-xs rounded hover:bg-white hover:text-black transition uppercase font-bold">Settings</button>
+                </div>
+
+                <div onclick="showPage('plan')" class="menu-card p-8 rounded-2xl">
+                    <div class="h-10 w-10 bg-zinc-800 rounded flex items-center justify-center mb-4 text-white">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
+                    </div>
+                    <h3 class="header-font text-lg font-bold text-white mb-1">PURCHASE PLANS</h3>
+                    <p class="text-xs text-zinc-500 mb-4">Upgrade your power.</p>
+                    <button class="text-xs text-white border-b border-zinc-600 pb-1 hover:border-purple-500 transition">View Pricing</button>
+                </div>
+
+                <div onclick="window.open('https://discord.gg/QnpGpdAh', '_blank')" class="menu-card p-8 rounded-2xl md:col-span-2">
+                     <div class="flex items-center gap-4">
+                        <div class="h-12 w-12 bg-[#5865F2] rounded-xl flex items-center justify-center text-white">
+                            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037 26.153 26.153 0 0 0-3.327 6.86 19.5 19.5 0 0 0-4.886 1.516.07.07 0 0 0-.018.026.071.071 0 0 0-.03.026.07.07 0 0 0-.01.04v.004c-.004.01-.01.02-.01.03a.07.07 0 0 0 .01.04l.004.01c.01.02.02.04.04.05a.074.074 0 0 0 .03.02 14.86 14.86 0 0 0 4.298 2.162.07.07 0 0 0 .079-.026l.995-1.37a14.65 14.65 0 0 1-3.64-1.748.077.077 0 0 1-.008-.106l.243-.284a15.488 15.488 0 0 0 3.75 1.84.07.07 0 0 0 .076-.02l1.015-1.424a.074.074 0 0 0-.016-.096 11.233 11.233 0 0 1-1.79-1.226.076.076 0 0 1-.005-.107l.254-.296a11.983 11.983 0 0 0 2.054 1.344.073.073 0 0 0 .078-.014l.015-.012.003-.003.004-.002.006-.006a.073.073 0 0 0 .025-.047 22.053 22.053 0 0 0 3.327-6.86.074.074 0 0 0-.079-.037ZM10.056 15.655c-1.155 0-2.115-1.06-2.115-2.365 0-1.306.94-2.365 2.115-2.365 1.175 0 2.135 1.06 2.135 2.365 0 1.305-.94 2.365-2.135 2.365Zm5.688 0c-1.155 0-2.115-1.06-2.115-2.365 0-1.306.94-2.365 2.115-2.365 1.175 0 2.135 1.06 2.135 2.365 0 1.305-.94 2.365-2.135 2.365Z"/></svg>
+                        </div>
+                        <div>
+                            <h3 class="header-font text-lg font-bold text-white">JOIN DISCORD</h3>
+                            <p class="text-xs text-zinc-400">Get support and updates.</p>
+                        </div>
+                        <button class="ml-auto px-4 py-2 bg-[#5865F2] hover:bg-[#4752c4] text-white rounded font-bold text-xs uppercase transition">Join Now</button>
+                     </div>
+                </div>
+
+            </div>
+            
+            <div class="mt-12 text-center">
+                <p class="text-[10px] text-zinc-700 font-mono uppercase">Xaingrung Network Systems © 2024</p>
+            </div>
+        </div>
+    </section>
+
+    <section id="plan-page" class="page hidden min-h-screen p-6 md:p-20">
+        <div class="max-w-5xl mx-auto">
+            <button onclick="showPage('home')" class="mb-8 text-zinc-500 hover:text-white transition">&larr; BACK TO DASHBOARD</button>
+            <h2 class="header-font text-4xl font-black text-white mb-10 text-center italic">SELECT YOUR <span class="text-purple-500">POWER PLAN</span></h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="glass-panel p-8 flex flex-col items-center border-t-4 border-zinc-700">
+                    <h3 class="header-font text-xl font-bold mb-2">BRONZE</h3>
+                    <p class="text-zinc-500 text-xs mb-6">Entry Level Striker</p>
+                    <div class="text-3xl font-black text-white mb-6">฿290 <span class="text-xs text-zinc-600">/ 30 Days</span></div>
+                    <ul class="text-sm text-zinc-400 space-y-4 mb-8 text-center">
+                        <li>300s Attack Time</li>
+                        <li>1 Concurrent Attack</li>
+                        <li>All L4 Methods</li>
+                        <li>Basic L7 Methods</li>
+                    </ul>
+                    <button class="w-full py-3 bg-zinc-800 rounded font-bold hover:bg-white hover:text-black transition">PURCHASE</button>
+                </div>
+                <div class="glass-panel p-8 flex flex-col items-center border-t-4 border-purple-600 scale-105 shadow-[0_0_50px_rgba(157,78,221,0.2)]">
+                    <div class="bg-purple-600 text-white text-[10px] px-2 py-1 rounded font-black mb-4 uppercase">Popular</div>
+                    <h3 class="header-font text-xl font-bold mb-2">GOLD VIP</h3>
+                    <p class="text-purple-400 text-xs mb-6">Advanced Warfare</p>
+                    <div class="text-3xl font-black text-white mb-6">฿890 <span class="text-xs text-zinc-600">/ 30 Days</span></div>
+                    <ul class="text-sm text-zinc-300 space-y-4 mb-8 text-center">
+                        <li>600s Attack Time</li>
+                        <li>2 Concurrent Attacks</li>
+                        <li>Premium L7 (CF Bypass)</li>
+                        <li>Botnet Raw Power</li>
+                    </ul>
+                    <button class="w-full py-3 bg-purple-600 rounded font-bold hover:bg-purple-500 transition">PURCHASE</button>
+                </div>
+                <div class="glass-panel p-8 flex flex-col items-center border-t-4 border-white">
+                    <h3 class="header-font text-xl font-bold mb-2">ULTIMATE</h3>
+                    <p class="text-zinc-500 text-xs mb-6">God Mode</p>
+                    <div class="text-3xl font-black text-white mb-6">฿2,500 <span class="text-xs text-zinc-600">/ Lifetime</span></div>
+                    <ul class="text-sm text-zinc-400 space-y-4 mb-8 text-center">
+                        <li>1200s Attack Time</li>
+                        <li>5 Concurrent Attacks</li>
+                        <li>Private API Access</li>
+                        <li>24/7 Dedicated Support</li>
+                    </ul>
+                    <button class="w-full py-3 bg-white text-black rounded font-bold hover:bg-zinc-200 transition">PURCHASE</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="profile-page" class="page hidden min-h-screen p-6 flex items-center justify-center">
+        <div class="max-w-xl w-full glass-panel p-10 relative overflow-hidden profile-gradient">
+            <div class="absolute top-0 right-0 p-4 opacity-10 font-black text-6xl italic header-font">BOTNET</div>
+            
+            <div class="flex items-center gap-6 mb-10">
+                <div class="w-24 h-24 bg-gradient-to-br from-purple-600 to-black rounded-2xl flex items-center justify-center text-4xl border border-purple-500/50">💀</div>
+                <div>
+                    <h2 class="header-font text-3xl font-black text-white">OPERATOR_X</h2>
+                    <p class="text-purple-400 font-mono text-sm">[ RANK: MASTER OVERLORD ]</p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4 mb-10">
+                <div class="bg-black/50 p-4 border border-zinc-800 rounded-lg">
+                    <div class="text-[10px] text-zinc-500 mb-1 uppercase">Total Strikes</div>
+                    <div class="text-xl font-bold text-white header-font">1,492</div>
+                </div>
+                <div class="bg-black/50 p-4 border border-zinc-800 rounded-lg">
+                    <div class="text-[10px] text-zinc-500 mb-1 uppercase">Member Since</div>
+                    <div class="text-xl font-bold text-white header-font">JAN 2024</div>
+                </div>
+                <div class="bg-black/50 p-4 border border-zinc-800 rounded-lg col-span-2">
+                    <div class="text-[10px] text-zinc-500 mb-1 uppercase">System Status</div>
+                    <div class="text-green-500 font-mono text-xs">ENCRYPTED_CONNECTION_STABLE</div>
+                </div>
+            </div>
+
+            <button onclick="showPage('home')" class="w-full py-4 bg-zinc-900 border border-zinc-800 rounded font-bold hover:border-purple-500 transition uppercase tracking-widest text-xs">Return to Mainframe</button>
         </div>
     </section>
 
@@ -186,7 +372,7 @@ HTML_CODE = """
                 <div class="flex gap-4">
                     <button onclick="showPage('home')" class="text-xs text-zinc-500 hover:text-white transition">Dashboard</button>
                     <button class="text-xs text-white font-bold border-b-2 border-white pb-1">Attacks</button>
-                    <button class="text-xs text-zinc-500 hover:text-white transition">Plans</button>
+                    <button onclick="showPage('plan')" class="text-xs text-zinc-500 hover:text-white transition">Plans</button>
                 </div>
             </div>
 
@@ -514,8 +700,7 @@ def launch():
         else:
             return jsonify({"status": "error", "message": msg or f"HTTP_ERR_{response.status_code}"})
     except Exception as e:
-        return jsonify({"status": "error", "message": f"CONN_FAILED: {str(e)}"})
+        return jsonify({"status": "error", "message": str(e)})
 
 if __name__ == '__main__':
-    print("XAINRUNG ADVANCED PANEL WITH TOKEN SYSTEM IS STARTING...")
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000)
